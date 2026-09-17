@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import anthropic
 import os
+import json
 
 # Load the API key from our local .env file
 load_dotenv()
@@ -43,12 +44,14 @@ def analyze_email(email: Email):
             {
                 "role": "user",
                 "content": f"""
-Analyze this email and return the result in exactly this format:
+Analyze this email and return only valid JSON with these four fields:
 
-Action: [the main thing the recipient needs to do, or "No action"]
-Deadline: [deadline if there is one, otherwise "None"]
-Priority: [high, medium, or low]
-Reason: [short explanation for why this action is needed]
+{{
+    "action": "the main thing the recipient needs to do, or No action",
+    "deadline": "deadline if there is one, otherwise None",
+    "priority": "high, medium, or low",
+    "reason": "short explanation for why this action is needed"
+}}
 
 Subject: {email.subject}
 
@@ -59,10 +62,16 @@ Email:
         ]
     )
 
-    #Get the text Claude returned
+    # Get the text Claude returned
     analysis = response.content[0].text
+
+    # Remove Markdown code fences if Claude adds them
+    analysis = analysis.replace("```json", "").replace("```", "").strip()
+    # Turn Claude's JSON text into a Python dictionary
+    task_data = json.loads(analysis)
 
     return {
         "subject": email.subject,
-        "analysis": analysis
+        "analysis": analysis,
+        "task_data": task_data
     }
