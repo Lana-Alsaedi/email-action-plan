@@ -1,0 +1,9 @@
+# Keep API keys and local secrets out of GitHub
+.env
+
+# Python virtual environment
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
