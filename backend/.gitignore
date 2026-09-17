@@ -10,3 +10,5 @@ __pycache__/
 
 # Hide Google credentials 
 credentials.json
+
+token.json
