@@ -24,6 +24,7 @@ class Email(BaseModel):
 
 # Define the task information we want Claude to return
 class Task(BaseModel):
+    subject: str
     action: str
     deadline: str
     priority: str
@@ -67,11 +68,17 @@ Email:
 
     # Remove Markdown code fences if Claude adds them
     analysis = analysis.replace("```json", "").replace("```", "").strip()
+    
     # Turn Claude's JSON text into a Python dictionary
     task_data = json.loads(analysis)
 
+    # Add the email subject to our task data
+    task_data["subject"] = email.subject
+
+    # Validate Claude's data against our Task structure
+    task = Task(**task_data)
+
     return {
         "subject": email.subject,
-        "analysis": analysis,
-        "task_data": task_data
-    }
+        "task": task
+}
