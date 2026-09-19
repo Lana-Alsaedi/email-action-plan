@@ -7,3 +7,7 @@ firebase_admin.initialize_app(cred)
 
 # Create my Firestore database connection
 db = firestore.client()
+
+def save_email(email_data):
+    # Save the analyzed email to Firestore
+    db.collection("emails").document(email_data["id"]).set(email_data)
