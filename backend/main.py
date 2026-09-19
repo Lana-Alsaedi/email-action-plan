@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from gmail import get_latest_emails, extract_email_content
 import anthropic
 import os
 import json
@@ -19,12 +20,14 @@ client = anthropic.Anthropic(
 
 # Define the structure of an email our backend expects
 class Email(BaseModel):
+    id: str
     subject: str
     body: str
 
 # Define the task information we want Claude to return
 class Task(BaseModel):
     subject: str
+    actionable: bool
     action: str
     deadline: str
     priority: str
@@ -34,6 +37,24 @@ class Task(BaseModel):
 @app.get("/")
 def root():
     return {"message": "Email Action Plan backend is working!"}
+
+@app.get("/gmail")
+def gmail_test():
+    # Get the 5 newest emails from Gmail
+    emails = get_latest_emails()
+    tasks = []
+    # Analyze each email with Claude
+    for email in emails:
+        email_content = extract_email_content(email)
+        task = analyze_email(
+            Email(
+                id=email["id"],
+                subject=email_content["subject"],
+                body=email_content["body"]
+            )
+        )
+        tasks.append(task)
+    return tasks
 
 # Send the email to Claude and ask for structured task information
 @app.post("/analyze")
@@ -48,11 +69,14 @@ def analyze_email(email: Email):
 Analyze this email and return only valid JSON with these four fields:
 
 {{
+    "actionable": true or false,
     "action": "the main thing the recipient needs to do, or No action",
     "deadline": "deadline if there is one, otherwise None",
     "priority": "high, medium, or low",
     "reason": "short explanation for why this action is needed"
 }}
+
+Set actionable to true only when the recipient needs to take an action. Set it to false for promotional emails, informational emails, optional offers, and emails that require no response.
 
 Subject: {email.subject}
 
@@ -79,6 +103,7 @@ Email:
     task = Task(**task_data)
 
     return {
+        "id": email.id,
         "subject": email.subject,
         "task": task
 }
