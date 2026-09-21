@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from gmail import get_latest_emails, extract_email_content
+from firebase import save_email, db
 import anthropic
 import os
 import json
@@ -53,8 +54,30 @@ def gmail_test():
                 body=email_content["body"]
             )
         )
+        # Save the analyzed email to Firestore
+        save_email({
+            "id": email["id"],
+            "subject": task["subject"],
+            "body": email_content["body"],
+            "received_at": email_content["received_at"],
+            "actionable": task["task"].actionable,
+            "action": task["task"].action,
+            "deadline": task["task"].deadline,
+            "priority": task["task"].priority,
+            "reason": task["task"].reason
+        })
         tasks.append(task)
     return tasks
+
+@app.get("/emails")
+def get_emails():
+    # Get all saved emails from Firestore
+    emails = db.collection("emails").stream()
+    results = []
+    # Turn each Firestore document into a dictionary
+    for email in emails:
+        results.append(email.to_dict())
+    return results
 
 # Send the email to Claude and ask for structured task information
 @app.post("/analyze")
