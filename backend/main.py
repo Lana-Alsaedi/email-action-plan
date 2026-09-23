@@ -4,15 +4,28 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from gmail import get_latest_emails, extract_email_content
 from firebase import save_email, db
+from fastapi.middleware.cors import CORSMiddleware
 import anthropic
 import os
 import json
 
+# Create the FastAPI app
+app = FastAPI()
+
+# Allow our local React app to connect to FastAPI
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Load the API key from our local .env file
 load_dotenv()
-
-# Create the FastAPI app.
-app = FastAPI()
 
 # Create a Claude client using the API key from .env
 client = anthropic.Anthropic(
