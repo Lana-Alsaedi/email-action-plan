@@ -79,7 +79,17 @@ def gmail_test():
             "priority": task["task"].priority,
             "reason": task["task"].reason
         })
-        tasks.append(task)
+        tasks.append({
+            "id": email["id"],
+            "subject": task["subject"],
+            "body": email_content["body"],
+            "received_at": email_content["received_at"],
+            "actionable": task["task"].actionable,
+            "action": task["task"].action,
+            "deadline": task["task"].deadline,
+            "priority": task["task"].priority,
+            "reason": task["task"].reason
+        })
     return tasks
 
 @app.get("/emails")

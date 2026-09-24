@@ -3,6 +3,20 @@ import './App.css'
 
 function App() {
   const [emails, setEmails] = useState([])
+  const [loading, setLoading] = useState(false)
+  const refreshEmails = () => {
+    setLoading(true)
+    fetch('http://localhost:8000/gmail')
+      .then((response) => response.json())
+      .then(() => {
+        return fetch('http://localhost:8000/emails')
+      })
+      .then((response) => response.json())
+      .then((data) => {
+        setEmails(data)
+        setLoading(false)
+      })
+  }
 
   // Get saved emails from our backend
   useEffect(() => {
@@ -56,8 +70,8 @@ function App() {
       </section>
 
       {/* Refresh button for later */}
-      <button className="refresh-button">
-        ↻ Refresh emails
+      <button className="refresh-button" onClick={refreshEmails}>
+        {loading ? 'Refreshing...' : '↻ Refresh emails'}
       </button>
     </main>
   )
