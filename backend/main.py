@@ -57,8 +57,13 @@ def gmail_test():
     # Get the 5 newest emails from Gmail
     emails = get_latest_emails()
     tasks = []
-    # Analyze each email with Claude
+
+    # Analyze each email with Claude only if it is not already saved
     for email in emails:
+        existing_email = db.collection("emails").document(email["id"]).get()
+        if existing_email.exists:
+            # Skip emails we have already analyzed
+            continue
         email_content = extract_email_content(email)
         task = analyze_email(
             Email(
@@ -67,6 +72,7 @@ def gmail_test():
                 body=email_content["body"]
             )
         )
+
         # Save the analyzed email to Firestore
         save_email({
             "id": email["id"],
@@ -79,6 +85,7 @@ def gmail_test():
             "priority": task["task"].priority,
             "reason": task["task"].reason
         })
+
         tasks.append({
             "id": email["id"],
             "subject": task["subject"],
