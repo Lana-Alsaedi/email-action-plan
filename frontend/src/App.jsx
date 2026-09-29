@@ -10,8 +10,10 @@ function getPacificDate() {
 function App() {
   const [emails, setEmails] = useState([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const refreshEmails = () => {
     setLoading(true)
+    setError('')
     fetch('http://localhost:8000/gmail')
       .then((response) => response.json())
       .then(() => {
@@ -22,6 +24,11 @@ function App() {
         setEmails(data)
         setLoading(false)
       })
+      .catch((error) => {
+        console.error('Refresh failed:', error)
+        setError('Could not refresh emails')
+        setLoading(false)
+      })
   }
 
   // Get saved emails from our backend
@@ -29,6 +36,10 @@ function App() {
     fetch('http://localhost:8000/emails')
       .then((response) => response.json())
       .then((data) => setEmails(data))
+      .catch((error) => {
+        console.error('Initial load failed:', error)
+        setError('Could not load emails')
+      })
   }, [])
 
   // Main popup layout
