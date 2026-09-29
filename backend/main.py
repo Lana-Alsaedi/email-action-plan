@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import anthropic
 import os
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Create the FastAPI app
 app = FastAPI()
@@ -18,6 +20,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "chrome-extension://domnbnbfipidkhfehoaennghefhlijdf",
+        
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -43,7 +47,8 @@ class Task(BaseModel):
     subject: str
     actionable: bool
     action: str
-    deadline: str
+    deadline: str | None
+    deadline_date: str | None
     priority: str
     reason: str
 
@@ -82,6 +87,7 @@ def gmail_test():
             "actionable": task["task"].actionable,
             "action": task["task"].action,
             "deadline": task["task"].deadline,
+            "deadline_date": task["task"].deadline_date,
             "priority": task["task"].priority,
             "reason": task["task"].reason
         })
@@ -94,6 +100,7 @@ def gmail_test():
             "actionable": task["task"].actionable,
             "action": task["task"].action,
             "deadline": task["task"].deadline,
+            "deadline_date": task["task"].deadline_date,
             "priority": task["task"].priority,
             "reason": task["task"].reason
         })
@@ -109,9 +116,42 @@ def get_emails():
         results.append(email.to_dict())
     return results
 
+@app.post("/migrate-deadlines")
+def migrate_deadlines():
+    # Re-analyze existing emails so they get the new deadline_date field
+    emails = db.collection("emails").stream()
+    updated = []
+    for email in emails:
+        email_data = email.to_dict()
+        task = analyze_email(
+            Email(
+                id=email_data["id"],
+                subject=email_data["subject"],
+                body=email_data["body"]
+            )
+        )
+        save_email({
+            "id": email_data["id"],
+            "subject": task["subject"],
+            "body": email_data["body"],
+            "received_at": email_data["received_at"],
+            "actionable": task["task"].actionable,
+            "action": task["task"].action,
+            "deadline": task["task"].deadline,
+            "deadline_date": task["task"].deadline_date,
+            "priority": task["task"].priority,
+            "reason": task["task"].reason
+        })
+        updated.append(email_data["id"])
+    return {
+        "message": "Existing emails migrated successfully",
+        "updated": len(updated)
+    }
+
 # Send the email to Claude and ask for structured task information
 @app.post("/analyze")
 def analyze_email(email: Email):
+    today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=300,
@@ -119,17 +159,19 @@ def analyze_email(email: Email):
             {
                 "role": "user",
                 "content": f"""
-Analyze this email and return only valid JSON with these four fields:
+Analyze this email and return only valid JSON with these six fields:
 
 {{
     "actionable": true or false,
     "action": "the main thing the recipient needs to do, or No action",
-    "deadline": "deadline if there is one, otherwise None",
+    "deadline": "a friendly description of the deadline, such as September 30 at 12:00 PM PT, if there is one, otherwise null",
+    "deadline_date": "deadline as YYYY-MM-DD if there is one, otherwise null",
     "priority": "high, medium, or low",
     "reason": "short explanation for why this action is needed"
 }}
 
 Set actionable to true only when the recipient needs to take an action. Set it to false for promotional emails, informational emails, optional offers, and emails that require no response.
+Today's date is {today}. Use this date to determine the correct year for any deadlines mentioned in the email.
 
 Subject: {email.subject}
 

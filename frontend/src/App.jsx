@@ -39,7 +39,10 @@ function App() {
         <h2>Today</h2>
 
         {emails
-          .filter((email) => email.actionable)
+          .filter((email) => {
+            const today = new Date().toISOString().split('T')[0]
+            return email.actionable && email.deadline_date === today
+          })
           .map((email) => (
             <article className="email-card" key={email.id}>
               <div className="card-top">
