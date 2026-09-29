@@ -116,38 +116,6 @@ def get_emails():
         results.append(email.to_dict())
     return results
 
-@app.post("/migrate-deadlines")
-def migrate_deadlines():
-    # Re-analyze existing emails so they get the new deadline_date field
-    emails = db.collection("emails").stream()
-    updated = []
-    for email in emails:
-        email_data = email.to_dict()
-        task = analyze_email(
-            Email(
-                id=email_data["id"],
-                subject=email_data["subject"],
-                body=email_data["body"]
-            )
-        )
-        save_email({
-            "id": email_data["id"],
-            "subject": task["subject"],
-            "body": email_data["body"],
-            "received_at": email_data["received_at"],
-            "actionable": task["task"].actionable,
-            "action": task["task"].action,
-            "deadline": task["task"].deadline,
-            "deadline_date": task["task"].deadline_date,
-            "priority": task["task"].priority,
-            "reason": task["task"].reason
-        })
-        updated.append(email_data["id"])
-    return {
-        "message": "Existing emails migrated successfully",
-        "updated": len(updated)
-    }
-
 # Send the email to Claude and ask for structured task information
 @app.post("/analyze")
 def analyze_email(email: Email):
