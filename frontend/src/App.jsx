@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
+function getPacificDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+  }).format(new Date())
+}
+
 function App() {
   const [emails, setEmails] = useState([])
   const [loading, setLoading] = useState(false)
@@ -40,7 +46,7 @@ function App() {
 
         {emails
           .filter((email) => {
-            const today = new Date().toISOString().split('T')[0]
+            const today = getPacificDate()
             return email.actionable && email.deadline_date === today
           })
           .map((email) => (
