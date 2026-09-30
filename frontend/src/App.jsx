@@ -51,6 +51,8 @@ function App() {
         <p>{emails.length} emails</p>
       </header>
 
+      {error && <p>{error}</p>}
+
       {/* Show the emails we need to act on */}
       <section>
         <h2>Today</h2>
@@ -89,7 +91,7 @@ function App() {
           ))}
       </section>
 
-      {/* Refresh button for later */}
+      {/* Refresh emails */}
       <button className="refresh-button" onClick={refreshEmails}>
         {loading ? 'Refreshing...' : '↻ Refresh emails'}
       </button>
