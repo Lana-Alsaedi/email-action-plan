@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
-function getPacificDate() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Los_Angeles',
-  }).format(new Date())
-}
-
 function App() {
   const [emails, setEmails] = useState([])
   const [loading, setLoading] = useState(false)
@@ -15,11 +9,12 @@ function App() {
     setLoading(true)
     setError('')
     fetch('http://localhost:8000/gmail')
-      .then((response) => response.json())
-      .then(() => {
-        return fetch('http://localhost:8000/emails')
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Refresh failed')
+        }
+        return response.json()
       })
-      .then((response) => response.json())
       .then((data) => {
         setEmails(data)
         setLoading(false)
@@ -31,69 +26,126 @@ function App() {
       })
   }
 
-  // Get saved emails from our backend
+  // Load the latest emails when the popup opens
   useEffect(() => {
-    fetch('http://localhost:8000/emails')
-      .then((response) => response.json())
-      .then((data) => setEmails(data))
+    fetch('http://localhost:8000/gmail')
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Load failed')
+        }
+        return response.json()
+      })
+      .then((data) => {
+        setEmails(data.slice(0, 5))
+      })
       .catch((error) => {
         console.error('Initial load failed:', error)
         setError('Could not load emails')
       })
   }, [])
 
-  // Main popup layout
   return (
     <main className="app">
-      {/* Popup header */}
       <header className="header">
-        <h1>Email → Action Plan</h1>
-        <p>{emails.length} emails</p>
+        <div>
+          <h1>Email → Action Plan</h1>
+          <p className="header-subtitle">
+            Latest emails from your inbox
+          </p>
+        </div>
+        <span className="email-count">
+          {emails.length}
+        </span>
       </header>
+      {error && <p className="error-message">{error}</p>}
 
-      {error && <p>{error}</p>}
-
-      {/* Show the emails we need to act on */}
+      {/* Action needed */}
       <section>
-        <h2>Today</h2>
+        <h2>Action needed</h2>
+        {emails.filter((email) => email.actionable).length === 0 ? (
+          <p className="empty-message">
+            No action needed right now
+          </p>
+        ) : (
+          emails
+            .filter((email) => email.actionable)
+            .map((email) => (
+              <article className="email-card actionable-card" key={email.id}>
 
-        {emails
-          .filter((email) => {
-            const today = getPacificDate()
-            return email.actionable && email.deadline_date === today
-          })
-          .map((email) => (
-            <article className="email-card" key={email.id}>
-              <div className="card-top">
-                <span className={`priority ${email.priority}`}>
-                  {email.priority.toUpperCase()}
-                </span>
-                <span>{email.deadline}</span>
-              </div>
-
-              <h3>{email.subject}</h3>
-              <p>{email.action}</p>
-            </article>
-          ))}
+                <div className="status-row">
+                  <span className="status-label">
+                    ACTION NEEDED
+                  </span>
+                  <span className="action-status yes">
+                    YES
+                  </span>
+                </div>
+                <p className="sender">
+                  {email.sender || 'Unknown sender'}
+                </p>
+                <h3 className="summary">
+                  {email.summary || email.subject}
+                </h3>
+                <div className="action-block">
+                  <span className="detail-label">DO</span>
+                  <p>{email.action}</p>
+                </div>
+                <div className="details-row">
+                  <div className="detail">
+                    <span className="detail-label">DEADLINE</span>
+                    <span>
+                      {email.deadline || 'None'}
+                    </span>
+                  </div>
+                  <div className="detail">
+                    <span className="detail-label">PRIORITY</span>
+                    <span className={`priority ${email.priority}`}>
+                      {email.priority.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            ))
+        )}
       </section>
 
-      {/* Show informational emails */}
+      {/* No action needed */}
       <section>
-        <h2>FYI</h2>
+        <h2>No action needed</h2>
+        {emails.filter((email) => !email.actionable).length === 0 ? (
+          <p className="empty-message">
+            None
+          </p>
+        ) : (
+          emails
+            .filter((email) => !email.actionable)
+            .map((email) => (
+              <article className="email-card info-card" key={email.id}>
 
-        {emails
-          .filter((email) => !email.actionable)
-          .map((email) => (
-            <article className="email-card" key={email.id}>
-              <h3>{email.subject}</h3>
-              <p>{email.reason}</p>
-            </article>
-          ))}
+                <div className="status-row">
+                  <span className="status-label">
+                    ACTION NEEDED
+                  </span>
+                  <span className="action-status no">
+                    NO
+                  </span>
+                </div>
+                <p className="sender">
+                  {email.sender || 'Unknown sender'}
+                </p>
+                <h3 className="summary">
+                  {email.summary || email.subject}
+                </h3>
+              </article>
+            ))
+        )}
       </section>
-
-      {/* Refresh emails */}
-      <button className="refresh-button" onClick={refreshEmails}>
-        {loading ? 'Refreshing...' : '↻ Refresh emails'}
+      <button
+        className="refresh-button"
+        onClick={refreshEmails}
+        disabled={loading}
+      >
+        {loading ? 'Refreshing...' : '↻ Refresh latest 5 emails'}
       </button>
     </main>
   )
