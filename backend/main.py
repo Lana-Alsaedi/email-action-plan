@@ -102,6 +102,13 @@ def gmail_test():
         save_email(email)
     return new_tasks
 
+@app.delete("/gmail/{email_id}")
+def delete_gmail_email(email_id: str):
+    from gmail import delete_email
+    delete_email(email_id)
+    db.collection("emails").document(email_id).delete()
+    return {"success": True}
+
 @app.get("/emails")
 def get_emails():
     emails = db.collection("emails").stream()

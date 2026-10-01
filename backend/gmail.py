@@ -5,7 +5,7 @@ from googleapiclient.discovery import build
 import base64
 import re
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 def get_gmail_service():
     creds = None
@@ -113,3 +113,10 @@ def extract_email_content(email):
         "body": body,
         "received_at": received_at
     }
+
+def delete_email(email_id):
+    service = get_gmail_service()
+    service.users().messages().trash(
+        userId="me",
+        id=email_id
+    ).execute()

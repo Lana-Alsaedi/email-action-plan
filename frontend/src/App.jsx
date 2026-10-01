@@ -5,6 +5,29 @@ function App() {
   const [emails, setEmails] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const deleteEmail = (emailId) => {
+    const confirmed = window.confirm(
+      'Delete this email from Gmail?'
+    )
+    if (!confirmed) {
+      return
+    }
+    fetch(`http://localhost:8000/gmail/${emailId}`, {
+      method: 'DELETE',
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Delete failed')
+        }
+        setEmails((currentEmails) =>
+          currentEmails.filter((email) => email.id !== emailId)
+        )
+      })
+      .catch((error) => {
+        console.error('Delete failed:', error)
+        setError('Could not delete email')
+      })
+  }
   const refreshEmails = () => {
     setLoading(true)
     setError('')
@@ -16,7 +39,7 @@ function App() {
         return response.json()
       })
       .then((data) => {
-        setEmails(data)
+        setEmails(data.slice(0, 5))
         setLoading(false)
       })
       .catch((error) => {
@@ -26,7 +49,6 @@ function App() {
       })
   }
 
-  // Load the latest emails when the popup opens
   useEffect(() => {
     fetch('http://localhost:8000/gmail')
       .then((response) => {
@@ -44,48 +66,56 @@ function App() {
       })
   }, [])
 
+  const actionableEmails = emails.filter((email) => email.actionable)
+  const informationalEmails = emails.filter((email) => !email.actionable)
+
   return (
     <main className="app">
       <header className="header">
         <div>
-          <h1>Email → Action Plan</h1>
+          <div className="title-row">
+            <h1>Email → Action Plan</h1>
+            <span className="email-count">{emails.length}</span>
+          </div>
           <p className="header-subtitle">
-            Latest emails from your inbox
+            Your latest inbox activity
           </p>
         </div>
-        <span className="email-count">
-          {emails.length}
-        </span>
       </header>
       {error && <p className="error-message">{error}</p>}
-
-      {/* Action needed */}
-      <section>
-        <h2>Action needed</h2>
-        {emails.filter((email) => email.actionable).length === 0 ? (
-          <p className="empty-message">
-            No action needed right now
-          </p>
+      <section className="email-section">
+        <div className="section-header">
+          <div>
+            <h2>Action needed</h2>
+            <p>{actionableEmails.length} requiring attention</p>
+          </div>
+        </div>
+        {actionableEmails.length === 0 ? (
+          <div className="empty-state">
+            <span className="empty-icon">✓</span>
+            <p>No action needed right now</p>
+          </div>
         ) : (
-          emails
-            .filter((email) => email.actionable)
-            .map((email) => (
-              <article className="email-card actionable-card" key={email.id}>
-
-                <div className="status-row">
-                  <span className="status-label">
-                    ACTION NEEDED
-                  </span>
-                  <span className="action-status yes">
-                    YES
+          <div className="email-list">
+            {actionableEmails.map((email) => (
+              <article
+                className="email-card actionable-card"
+                key={email.id}
+              >
+                <div className="card-top">
+                  <div className="sender-info">
+                    <span className="sender">
+                      {email.sender || 'Unknown sender'}
+                    </span>
+                  </div>
+                  <span className={`priority ${email.priority}`}>
+                    {email.priority}
                   </span>
                 </div>
-                <p className="sender">
-                  {email.sender || 'Unknown sender'}
-                </p>
                 <h3 className="summary">
                   {email.summary || email.subject}
                 </h3>
+
                 <div className="action-block">
                   <span className="detail-label">DO</span>
                   <p>{email.action}</p>
@@ -93,51 +123,74 @@ function App() {
                 <div className="details-row">
                   <div className="detail">
                     <span className="detail-label">DEADLINE</span>
-                    <span>
-                      {email.deadline || 'None'}
-                    </span>
+                    <span>{email.deadline || 'None'}</span>
                   </div>
-                  <div className="detail">
-                    <span className="detail-label">PRIORITY</span>
-                    <span className={`priority ${email.priority}`}>
-                      {email.priority.toUpperCase()}
-                    </span>
-                  </div>
+                </div>
+                <div className="card-actions">
+                  <a
+                    href={`https://mail.google.com/mail/u/0/#all/${email.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="card-action"
+                  >
+                    Open in Gmail
+                  </a>
+
+                  <button
+                    className="card-action delete-action"
+                    onClick={() => deleteEmail(email.id)}
+                  >
+                    Delete
+                  </button>
                 </div>
               </article>
-            ))
+            ))}
+          </div>
         )}
       </section>
-
-      {/* No action needed */}
-      <section>
-        <h2>No action needed</h2>
-        {emails.filter((email) => !email.actionable).length === 0 ? (
-          <p className="empty-message">
-            None
-          </p>
+      <section className="email-section">
+        <div className="section-header">
+          <div>
+            <h2>No action needed</h2>
+            <p>{informationalEmails.length} informational</p>
+          </div>
+        </div>
+        {informationalEmails.length === 0 ? (
+          <div className="empty-state">
+            <p>None</p>
+          </div>
         ) : (
-          emails
-            .filter((email) => !email.actionable)
-            .map((email) => (
-              <article className="email-card info-card" key={email.id}>
-
-                <div className="status-row">
-                  <span className="status-label">
-                    ACTION NEEDED
-                  </span>
-                  <span className="action-status no">
-                    NO
-                  </span>
-                </div>
-                <p className="sender">
+          <div className="email-list">
+            {informationalEmails.map((email) => (
+              <article
+                className="email-card info-card"
+                key={email.id}
+              >
+                <span className="sender">
                   {email.sender || 'Unknown sender'}
-                </p>
+                </span>
                 <h3 className="summary">
                   {email.summary || email.subject}
                 </h3>
+                <div className="card-actions">
+                  <a
+                    href={`https://mail.google.com/mail/u/0/#all/${email.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="card-action"
+                  >
+                    Open in Gmail
+                  </a>
+                  <button
+                    className="card-action delete-action"
+                    onClick={() => deleteEmail(email.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
               </article>
-            ))
+            ))}
+          </div>
         )}
       </section>
       <button
@@ -145,7 +198,7 @@ function App() {
         onClick={refreshEmails}
         disabled={loading}
       >
-        {loading ? 'Refreshing...' : '↻ Refresh latest 5 emails'}
+        {loading ? 'Refreshing...' : '↻ Refresh latest 5'}
       </button>
     </main>
   )
