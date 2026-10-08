@@ -1,17 +1,31 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
+type Email = {
+  id: string
+  sender: string
+  subject: string
+  actionable: boolean
+  summary: string
+  action: string
+  deadline: string
+  priority: string
+}
+
 function App() {
-  const [emails, setEmails] = useState([])
+  const [emails, setEmails] = useState<Email[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const deleteEmail = (emailId) => {
+
+  const deleteEmail = (emailId: string) => {
     const confirmed = window.confirm(
       'Delete this email from Gmail?'
     )
+
     if (!confirmed) {
       return
     }
+
     fetch(`http://localhost:8000/gmail/${emailId}`, {
       method: 'DELETE',
     })
@@ -19,6 +33,7 @@ function App() {
         if (!response.ok) {
           throw new Error('Delete failed')
         }
+
         setEmails((currentEmails) =>
           currentEmails.filter((email) => email.id !== emailId)
         )
@@ -28,17 +43,20 @@ function App() {
         setError('Could not delete email')
       })
   }
+
   const refreshEmails = () => {
     setLoading(true)
     setError('')
+
     fetch('http://localhost:8000/gmail')
       .then((response) => {
         if (!response.ok) {
           throw new Error('Refresh failed')
         }
+
         return response.json()
       })
-      .then((data) => {
+      .then((data: Email[]) => {
         setEmails(data.slice(0, 5))
         setLoading(false)
       })
@@ -55,9 +73,10 @@ function App() {
         if (!response.ok) {
           throw new Error('Load failed')
         }
+
         return response.json()
       })
-      .then((data) => {
+      .then((data: Email[]) => {
         setEmails(data.slice(0, 5))
       })
       .catch((error) => {
@@ -77,12 +96,15 @@ function App() {
             <h1>Email → Action Plan</h1>
             <span className="email-count">{emails.length}</span>
           </div>
+
           <p className="header-subtitle">
             Your latest inbox activity
           </p>
         </div>
       </header>
+
       {error && <p className="error-message">{error}</p>}
+
       <section className="email-section">
         <div className="section-header">
           <div>
@@ -90,6 +112,7 @@ function App() {
             <p>{actionableEmails.length} requiring attention</p>
           </div>
         </div>
+
         {actionableEmails.length === 0 ? (
           <div className="empty-state">
             <span className="empty-icon">✓</span>
@@ -108,10 +131,12 @@ function App() {
                       {email.sender || 'Unknown sender'}
                     </span>
                   </div>
+
                   <span className={`priority ${email.priority}`}>
                     {email.priority}
                   </span>
                 </div>
+
                 <h3 className="summary">
                   {email.summary || email.subject}
                 </h3>
@@ -120,12 +145,14 @@ function App() {
                   <span className="detail-label">DO</span>
                   <p>{email.action}</p>
                 </div>
+
                 <div className="details-row">
                   <div className="detail">
                     <span className="detail-label">DEADLINE</span>
                     <span>{email.deadline || 'None'}</span>
                   </div>
                 </div>
+
                 <div className="card-actions">
                   <a
                     href={`https://mail.google.com/mail/u/0/#all/${email.id}`}
@@ -148,6 +175,7 @@ function App() {
           </div>
         )}
       </section>
+
       <section className="email-section">
         <div className="section-header">
           <div>
@@ -155,6 +183,7 @@ function App() {
             <p>{informationalEmails.length} informational</p>
           </div>
         </div>
+
         {informationalEmails.length === 0 ? (
           <div className="empty-state">
             <p>None</p>
@@ -169,9 +198,11 @@ function App() {
                 <span className="sender">
                   {email.sender || 'Unknown sender'}
                 </span>
+
                 <h3 className="summary">
                   {email.summary || email.subject}
                 </h3>
+
                 <div className="card-actions">
                   <a
                     href={`https://mail.google.com/mail/u/0/#all/${email.id}`}
@@ -181,6 +212,7 @@ function App() {
                   >
                     Open in Gmail
                   </a>
+
                   <button
                     className="card-action delete-action"
                     onClick={() => deleteEmail(email.id)}
@@ -193,6 +225,7 @@ function App() {
           </div>
         )}
       </section>
+
       <button
         className="refresh-button"
         onClick={refreshEmails}
