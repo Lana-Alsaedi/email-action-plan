@@ -3,7 +3,16 @@
   "name": "Email Action Plan",
   "version": "1.0.0",
   "description": "Turn your inbox into a clear list of what you need to do.",
+  "permissions": [
+    "sidePanel"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
-    "default_popup": "index.html"
+    "default_title": "Open Inbox Copilot"
+  },
+  "side_panel": {
+    "default_path": "index.html"
   }
 }
