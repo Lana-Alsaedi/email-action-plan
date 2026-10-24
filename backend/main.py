@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from gmail import get_latest_emails, extract_email_content
+from gmail import get_latest_emails, extract_email_content, create_reply_draft
 from firebase import save_email, db
 from fastapi.middleware.cors import CORSMiddleware
 import anthropic
@@ -42,6 +42,93 @@ class Task(BaseModel):
     deadline_date: str | None
     priority: str
     reason: str
+
+class QuestionsRequest(BaseModel):
+    subject: str
+    sender: str
+    body: str
+
+
+class ReplyQuestion(BaseModel):
+    id: str
+    question: str
+    type: str
+    required: bool
+    options: list[str] = []
+    allow_custom_answer: bool = True
+
+class GenerateReplyRequest(BaseModel):
+    subject: str
+    sender: str
+    body: str
+    answers: dict[str, str]
+
+
+class GenerateReplyResponse(BaseModel):
+    reply: str
+
+class SaveDraftRequest(BaseModel):
+    email_id: str
+    reply: str
+
+@app.post("/reply/generate", response_model=GenerateReplyResponse)
+def generate_reply(request: GenerateReplyRequest):
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1200,
+        messages=[
+            {
+                "role": "user",
+                "content": f"""
+Write a ready-to-use email reply for the user.
+
+Use the original email and the user's answers below.
+Be natural, concise, and professional.
+Do not invent personal facts, experience, dates, or commitments.
+Do not include a subject line or explanation.
+Return only the email reply.
+
+Original email sender: {request.sender}
+Original email subject: {request.subject}
+Original email body:
+{request.body}
+
+User's answers:
+{json.dumps(request.answers, ensure_ascii=False)}
+"""
+            }
+        ],
+    )
+
+    return {"reply": response.content[0].text.strip()}
+
+@app.post("/reply/draft")
+def save_reply_draft(request: SaveDraftRequest):
+    if not request.reply.strip():
+        return {"error": "The reply cannot be empty."}
+
+    try:
+        draft = create_reply_draft(
+            request.email_id,
+            request.reply.strip(),
+        )
+
+        return {
+            "success": True,
+            "draft_id": draft["draft_id"],
+            "thread_id": draft["thread_id"],
+            "message_id": draft["message_id"],
+            "message": "Reply saved to Gmail Drafts.",
+        }
+
+    except ValueError as error:
+        return {"error": str(error)}
+
+    except Exception as error:
+        print(f"Could not save Gmail draft: {error}")
+        return {
+            "error": "Could not save the reply to Gmail Drafts."
+        }
 
 @app.get("/")
 def root():
@@ -218,3 +305,70 @@ Email:
         "subject": email.subject,
         "task": task,
     }
+
+@app.post("/reply/questions")
+def generate_reply_questions(request: QuestionsRequest):
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        messages=[
+            {
+                "role": "user",
+                "content": f"""
+You help the user prepare accurate, personalized email replies.
+
+Read the email and determine what information is needed
+before writing a useful reply.
+
+Ask only questions that are genuinely necessary.
+Do not ask for information already provided in the email.
+Never invent personal facts or commitments.
+
+Return only valid JSON in this format:
+{{
+    "questions": [
+        {{
+            "id": "short_unique_id",
+            "question": "The question to ask",
+            "type": "multiple_choice",
+            "required": true,
+            "options": ["Option 1", "Option 2", "Option 3"],
+            "allow_custom_answer": true
+        }}
+    ]
+}}
+
+Rules:
+- Return no more than 4 questions.
+- Return an empty questions list if no extra information is needed.
+- Use multiple_choice when a few clear options can capture the answer.
+- For multiple_choice, provide 2 to 5 relevant options.
+- Do not include "Other" as an option. The interface provides a
+  separate custom-answer field automatically.
+- Always allow an optional custom answer or clarification.
+- Use short_answer when multiple choice would be awkward,
+  incomplete, or misleading.
+- For short_answer, return an empty options list.
+- Set required to true only when the information is necessary.
+- Use simple, direct language.
+- Every question must ask for one specific piece of information.
+
+Email sender: {request.sender}
+Email subject: {request.subject}
+Email body:
+{request.body}
+"""
+            }
+        ],
+    )
+
+    result = response.content[0].text
+    result = result.replace("```json", "").replace("```", "").strip()
+    questions_data = json.loads(result)
+
+    questions = [
+        ReplyQuestion(**question)
+        for question in questions_data["questions"]
+    ]
+
+    return {"questions": questions}

@@ -2,6 +2,8 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from email.message import EmailMessage
+from email.utils import parseaddr
 import base64
 import re
 
@@ -120,3 +122,67 @@ def delete_email(email_id):
         userId="me",
         id=email_id
     ).execute()
+
+def create_reply_draft(email_id, reply_body):
+    service = get_gmail_service()
+
+    # Get the original email and its conversation details
+    original = service.users().messages().get(
+        userId="me",
+        id=email_id,
+        format="full"
+    ).execute()
+
+    headers = {
+        header["name"].lower(): header["value"]
+        for header in original.get("payload", {}).get("headers", [])
+    }
+
+    sender_email = parseaddr(headers.get("from", ""))[1]
+    original_subject = headers.get("subject", "")
+    message_id = headers.get("message-id", "")
+    references = headers.get("references", "").strip()
+
+    if not sender_email:
+        raise ValueError("Could not determine the original sender's email address.")
+
+    # Keep the reply connected to the original email
+    subject = original_subject
+    if not subject.lower().startswith("re:"):
+        subject = f"Re: {subject}"
+
+    message = EmailMessage()
+    message["To"] = sender_email
+    message["Subject"] = subject
+
+    if message_id:
+        message["In-Reply-To"] = message_id
+        message["References"] = (
+            f"{references} {message_id}".strip()
+            if references
+            else message_id
+        )
+
+    message.set_content(reply_body)
+
+    # Encode the email for the Gmail API
+    raw_message = base64.urlsafe_b64encode(
+        message.as_bytes()
+    ).decode("utf-8")
+
+    # Save it as a draft in the original conversation
+    draft = service.users().drafts().create(
+        userId="me",
+        body={
+            "message": {
+                "raw": raw_message,
+                "threadId": original["threadId"],
+            }
+        },
+    ).execute()
+
+    return {
+        "draft_id": draft["id"],
+        "thread_id": original["threadId"],
+        "message_id": draft["message"]["id"],
+    }

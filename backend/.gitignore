@@ -15,3 +15,5 @@ token.json
 # Hide firebase private key
 firebase-key.json
 *-firebase-adminsdk-*.json
+
+token_backup.json
