@@ -75,95 +75,109 @@ The evaluation examined whether the model correctly identified emails requiring 
 
 ### Prerequisites
 
-Install the following:
+Install:
 
 - Git
+
 - Python 3
+
 - Node.js and npm
+
 - Google Chrome
 
-You will also need an Anthropic API key, Google Cloud OAuth credentials, and a Firebase project with Cloud Firestore configured.
+You will also need an Anthropic API key, a Google Cloud project with the Gmail API enabled, and a Firebase project with Cloud Firestore enabled.
 
-### 1. Clone the Repository
+### 1. Clone the repository
 
-```bash
-git clone https://github.com/Lana-Alsaedi/email-action-plan.git
-cd email-action-plan
-```
+    git clone https://github.com/Lana-Alsaedi/email-action-plan.git
 
-### 2. Set Up the Backend
+    cd email-action-plan
 
-Navigate to the backend directory and create a virtual environment:
+### 2. Install dependencies
 
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-```
+Run the setup script from the project root:
 
-Install the required packages:
+    chmod +x setup.sh dev.sh
 
-```bash
-pip install fastapi "uvicorn[standard]" python-dotenv anthropic firebase-admin google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
-```
+    ./setup.sh
 
-#### Configure Credentials
+This creates the Python virtual environment, installs backend and frontend dependencies, and creates `backend/.env` from the example if it doesn't already exist.
 
-1. Create a `.env` file inside `backend/` and add your Anthropic API key:
+The script preserves an existing `.env` file.
 
-   ```env
-   ANTHROPIC_API_KEY=your_api_key
-   ```
+### 3. Configure credentials
 
-2. Enable the Gmail API in Google Cloud Console, configure OAuth, and save your OAuth client credentials as `backend/credentials.json`.
+Before starting the app, configure these three files.
 
-3. Create a Firebase service account key and save it as `backend/firebase-key.json`.
+**`backend/.env`**
 
-4. Complete the Google OAuth flow when prompted by the application. The authentication process may generate a token file.
+Add your Anthropic API key:
 
-#### Start the Backend
+    ANTHROPIC_API_KEY=your_actual_api_key
 
-From the `backend/` directory, run:
+Get an API key from the Anthropic Console.
 
-```bash
-uvicorn main:app --reload
-```
+**`backend/credentials.json`**
 
-The API runs at http://localhost:8000.
+1. Open the Google Cloud Console.
 
-Interactive API documentation is available at http://localhost:8000/docs.
+2. Select or create a project.
 
-### 3. Set Up the Frontend
+3. Enable the Gmail API.
 
-Open a second terminal and navigate to the repository root, then run:
+4. Configure the OAuth consent screen and create an OAuth client appropriate for the application.
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+5. Download the OAuth client JSON file and save it as `backend/credentials.json`.
 
-Open the local URL printed by Vite.
+The application uses Google OAuth to request Gmail access. On first use, complete the browser sign-in and authorization flow. The backend saves the resulting `backend/token.json` locally for subsequent runs.
 
-### 4. Build the Chrome Extension
+**`backend/firebase-key.json`**
 
-From the repository root, run:
+1. Open your Firebase project.
 
-```bash
-cd frontend
-npm run build:extension
-```
+2. Enable Cloud Firestore.
 
-Then load the extension in Chrome:
+3. Create a service account key through the project's service-account settings.
 
-1. Open `chrome://extensions`.
+4. Download the JSON key and save it as `backend/firebase-key.json`.
+
+Keep all three files private. Do not commit API keys, OAuth credentials, authentication tokens, or Firebase service-account keys.
+
+### 4. Start the app
+
+From the project root, run:
+
+    ./dev.sh
+
+This starts both the backend and frontend.
+
+- **Frontend:** http://localhost:5173
+
+- **Backend:** http://127.0.0.1:8000
+
+- **API documentation:** http://127.0.0.1:8000/docs
+
+Press **Control + C** to stop the development servers.
+
+### 5. Load the Chrome extension
+
+Build the extension from the project root:
+
+    cd frontend
+
+    npm run build:extension
+
+Then:
+
+1. Open `chrome://extensions` in Chrome.
+
 2. Enable **Developer mode**.
+
 3. Select **Load unpacked**.
-4. Choose the generated `frontend/dist` folder.
 
-**Note:** Developers using their own unpacked extension may need to update the allowed extension origin in `backend/main.py`. Google OAuth and Firebase must also be configured for their own accounts and projects.
+4. Choose the generated `frontend/dist` directory.
 
-Keep API keys, OAuth credentials, authentication tokens, and Firebase service account keys out of version control.
+Developers using their own unpacked extension may need to update the allowed Chrome extension origin in `backend/main.py` to match their extension ID. Google OAuth and Firebase must also be configured for their own accounts and projects.
 
 ## CI/CD
 
@@ -173,18 +187,15 @@ Keep API keys, OAuth credentials, authentication tokens, and Firebase service ac
 
 ## Security
 
-- **Credential protection:** API keys, OAuth credentials, tokens, and Firebase service account keys should never be committed to version control.
-- **Gmail permissions:** Uses Google OAuth to access email according to the permissions granted by the user.
-- **AI processing:** Email content is sent to Anthropic Claude for analysis and reply generation.
-- **Draft review:** Generated replies are saved as drafts rather than automatically sent.
+- Never commit API keys, OAuth credentials, tokens, or Firebase service-account keys.
+- Gmail access is controlled by Google OAuth permissions.
+- Email content is sent to Anthropic Claude for analysis and reply generation.
+- Generated replies are saved as drafts, not automatically sent.
 
-Always review AI-generated content before using it.
 
 ## Future Improvements
 
 - **Instruction-based reply refinement:** Let users ask Claude to revise a generated reply with instructions such as "make it more professional," "sound warmer," or "shorten it." Users can review the updated version before saving it.
-- **Simplified setup:** Add a `requirements.txt` file, a safe `.env.example`, and clearer onboarding instructions to make local setup easier.
-- **More transparent AI decisions:** Provide clearer explanations of email classifications, assigned priorities, and uncertain predictions.
 
 ## Feedback and Contact
 

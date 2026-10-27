@@ -1,0 +1,25 @@
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Python environments and caches
+venv/
+__pycache__/
+*.py[cod]
+
+# Node dependencies and build output
+node_modules/
+dist/
+
+# Local credentials and authentication tokens
+credentials.json
+token.json
+token_backup.json
+firebase-key.json
+*-firebase-adminsdk-*.json
+*service-account*.json
+
+# Local editor and operating system files
+.DS_Store
+.vscode/

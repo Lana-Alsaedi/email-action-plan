@@ -1,19 +1,19 @@
-# Keep API keys and local secrets out of GitHub
+# Local environment variables and secrets
 .env
+.env.*
+!.env.example
 
-# Python virtual environment
+# Python virtual environment and cache
 venv/
-
-# Python cache files
 __pycache__/
-*.pyc
+*.py[cod]
 
-# Hide Google credentials 
+# Google OAuth credentials and tokens
 credentials.json
-
 token.json
-# Hide firebase private key
+token_backup.json
+
+# Firebase service account keys
 firebase-key.json
 *-firebase-adminsdk-*.json
-
-token_backup.json
+*service-account*.json
