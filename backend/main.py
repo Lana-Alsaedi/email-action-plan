@@ -1,5 +1,5 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from gmail import get_latest_emails, extract_email_content, create_reply_draft
 from firebase import save_email, db
@@ -11,6 +11,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -24,14 +25,22 @@ app.add_middleware(
 )
 
 load_dotenv()
-client = anthropic.Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY")
-)
+api_key = os.getenv("ANTHROPIC_API_KEY")
+
+if not api_key or api_key == "your_anthropic_api_key_here":
+    raise RuntimeError(
+        "Anthropic API key is missing. Add your key to "
+        "'backend/.env' as ANTHROPIC_API_KEY=your_actual_api_key."
+    )
+
+client = anthropic.Anthropic(api_key=api_key)
+
 
 class Email(BaseModel):
     id: str
     subject: str
     body: str
+
 
 class Task(BaseModel):
     subject: str
@@ -42,6 +51,7 @@ class Task(BaseModel):
     deadline_date: str | None
     priority: str
     reason: str
+
 
 class QuestionsRequest(BaseModel):
     subject: str
@@ -54,22 +64,79 @@ class ReplyQuestion(BaseModel):
     question: str
     type: str
     required: bool
-    options: list[str] = []
+    options: list[str] = Field(default_factory=list)
     allow_custom_answer: bool = True
+
+
+class ReplyAnswer(BaseModel):
+    question: str
+    answer: str
+
 
 class GenerateReplyRequest(BaseModel):
     subject: str
     sender: str
     body: str
-    answers: dict[str, str]
+    answers: list[ReplyAnswer]
 
 
 class GenerateReplyResponse(BaseModel):
     reply: str
 
+
 class SaveDraftRequest(BaseModel):
     email_id: str
     reply: str
+
+
+# Read the AI response and return a useful error if it is not valid JSON
+def parse_json_response(text: str, description: str) -> dict:
+    cleaned = text.strip()
+
+    if not cleaned:
+        raise HTTPException(
+            status_code=502,
+            detail=f"The AI service returned an empty response while {description}. Please try again.",
+        )
+
+    # Remove Markdown fences if the AI included them
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+
+        cleaned = "\n".join(lines).strip()
+
+    try:
+        # Parse the complete response first
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        # Fall back to the first JSON object if the AI adds extra text
+        try:
+            start = cleaned.index("{")
+            parsed, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+        except (ValueError, json.JSONDecodeError) as error:
+            print(
+                f"Could not parse AI response while {description}: "
+                f"{error}; response starts with {cleaned[:300]!r}"
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"The AI service returned an unexpected response while {description}. Please try again.",
+            ) from error
+
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=502,
+            detail=f"The AI service returned an unexpected data format while {description}. Please try again.",
+        )
+
+    return parsed
+
 
 @app.post("/reply/generate", response_model=GenerateReplyResponse)
 def generate_reply(request: GenerateReplyRequest):
@@ -94,13 +161,31 @@ Original email body:
 {request.body}
 
 User's answers:
-{json.dumps(request.answers, ensure_ascii=False)}
-"""
+{json.dumps(
+    [answer.model_dump() for answer in request.answers],
+    ensure_ascii=False,
+)}
+""",
             }
         ],
     )
 
-    return {"reply": response.content[0].text.strip()}
+    if not response.content or not hasattr(response.content[0], "text"):
+        raise HTTPException(
+            status_code=502,
+            detail="The AI service did not return a reply. Please try again.",
+        )
+
+    reply = response.content[0].text.strip()
+
+    if not reply:
+        raise HTTPException(
+            status_code=502,
+            detail="The AI service returned an empty reply. Please try again.",
+        )
+
+    return {"reply": reply}
+
 
 @app.post("/reply/draft")
 def save_reply_draft(request: SaveDraftRequest):
@@ -130,33 +215,38 @@ def save_reply_draft(request: SaveDraftRequest):
             "error": "Could not save the reply to Gmail Drafts."
         }
 
+
 @app.get("/")
 def root():
     return {"message": "Email Action Plan backend is working!"}
+
 
 @app.get("/gmail")
 def gmail_test():
     # Get the latest 5 emails from Gmail
     emails = get_latest_emails()
+
     # Load emails currently saved in Firestore
     existing_emails = {}
     for saved_email in db.collection("emails").stream():
         existing_emails[saved_email.id] = saved_email.to_dict()
+
     new_tasks = []
+
     # Analyze the current Gmail batch
     for email in emails:
         email_id = email["id"]
-        # Extract sender and email content locally
         email_content = extract_email_content(email)
-        # Reuse existing data only when it already has the new summary field
+
+        # Reuse existing data only when it has the summary field
         if email_id in existing_emails and "summary" in existing_emails[email_id]:
             saved = existing_emails[email_id]
-            # Keep sender information up to date
             saved["sender"] = email_content["sender"]
             saved["body"] = email_content["body"]
             saved["received_at"] = email_content["received_at"]
             new_tasks.append(saved)
             continue
+
         task = analyze_email(
             Email(
                 id=email_id,
@@ -179,29 +269,39 @@ def gmail_test():
             "priority": task["task"].priority,
             "reason": task["task"].reason,
         })
+
     # Only keep the current Gmail batch in Firestore
     current_ids = {email["id"] for email in new_tasks}
+
     for saved_email in db.collection("emails").stream():
         if saved_email.id not in current_ids:
             saved_email.reference.delete()
+
     # Save the current batch
     for email in new_tasks:
         save_email(email)
+
     return new_tasks
+
 
 @app.delete("/gmail/{email_id}")
 def delete_gmail_email(email_id: str):
     from gmail import delete_email
+
     delete_email(email_id)
     db.collection("emails").document(email_id).delete()
+
     return {"success": True}
+
 
 @app.get("/emails")
 def get_emails():
     emails = db.collection("emails").stream()
     results = []
+
     for email in emails:
         results.append(email.to_dict())
+
     return results
 
 
@@ -210,6 +310,7 @@ def analyze_email(email: Email):
     today = datetime.now(
         ZoneInfo("America/Los_Angeles")
     ).strftime("%Y-%m-%d")
+
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=300,
@@ -235,7 +336,7 @@ The summary must:
 - focus on the main subject, offer, request, update, or information
 - include the sender's name when it makes the meaning clearer
 - choose the simplest useful description
-- leave out secondary details such as discounts, percentages, dates, or extra context unless they are essential to understanding the main point
+- leave out secondary details such as discounts, percentages, dates, or extra context unless essential
 - avoid words like "email", "newsletter", "message", "discussing", "sharing", or "regarding"
 - do not repeat the email subject word-for-word
 - do not use a period at the end
@@ -283,20 +384,21 @@ Today's date is {today}. Use this date to determine the correct year for any dea
 Subject: {email.subject}
 Email:
 {email.body}
-"""
+""",
             }
         ],
     )
-    analysis = response.content[0].text
 
-    analysis = (
-        analysis
-        .replace("```json", "")
-        .replace("```", "")
-        .strip()
-    )
+    if not response.content or not hasattr(response.content[0], "text"):
+        raise HTTPException(
+            status_code=502,
+            detail="The AI service did not return an email analysis. Please try again.",
+        )
 
-    task_data = json.loads(analysis)
+    analysis = response.content[0].text.strip()
+
+    task_data = parse_json_response(analysis, "analyzing the email")
+
     task_data["subject"] = email.subject
     task = Task(**task_data)
 
@@ -305,6 +407,7 @@ Email:
         "subject": email.subject,
         "task": task,
     }
+
 
 @app.post("/reply/questions")
 def generate_reply_questions(request: QuestionsRequest):
@@ -357,18 +460,63 @@ Email sender: {request.sender}
 Email subject: {request.subject}
 Email body:
 {request.body}
-"""
+""",
             }
         ],
     )
 
-    result = response.content[0].text
-    result = result.replace("```json", "").replace("```", "").strip()
-    questions_data = json.loads(result)
+    if not response.content or not hasattr(response.content[0], "text"):
+        raise HTTPException(
+            status_code=502,
+            detail="The AI service did not return reply questions. Please try again.",
+        )
 
-    questions = [
-        ReplyQuestion(**question)
-        for question in questions_data["questions"]
-    ]
+    result = response.content[0].text
+    questions_data = parse_json_response(result, "preparing reply questions")
+
+    raw_questions = questions_data.get("questions")
+
+    if not isinstance(raw_questions, list):
+        raise HTTPException(
+            status_code=502,
+            detail="The AI service returned reply questions in an unexpected format. Please try again.",
+        )
+
+    questions = []
+
+    for index, question in enumerate(raw_questions[:4]):
+        if not isinstance(question, dict):
+            print(f"Skipping malformed reply question at index {index}")
+            continue
+
+        # Keep question fields and options in the format the frontend expects
+        question_type = question.get("type", "short_answer")
+        if question_type not in ("multiple_choice", "short_answer"):
+            question_type = "short_answer"
+
+        options = question.get("options", [])
+        if not isinstance(options, list):
+            options = []
+
+        options = [
+            option if isinstance(option, str) else str(option.get("label", option.get("text", "")))
+            for option in options
+            if isinstance(option, str)
+            or (isinstance(option, dict) and (option.get("label") or option.get("text")))
+        ]
+
+        try:
+            questions.append(
+                ReplyQuestion(
+                    id=str(question.get("id") or f"question-{index + 1}"),
+                    question=str(question.get("question") or ""),
+                    type=question_type,
+                    required=bool(question.get("required", False)),
+                    options=options,
+                    allow_custom_answer=bool(question.get("allow_custom_answer", True)),
+                )
+            )
+        except Exception as error:
+            print(f"Skipping invalid reply question at index {index}: {error}")
 
     return {"questions": questions}

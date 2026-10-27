@@ -40,6 +40,7 @@ def get_latest_emails():
     # Ask Gmail for the 5 newest emails
     results = service.users().messages().list(
         userId="me",
+        labelIds=["INBOX"],
         maxResults=5
     ).execute()
     messages = results.get("messages", [])
@@ -93,25 +94,6 @@ def extract_email_content(email):
     return {
         "subject": subject,
         "sender": sender,
-        "body": body,
-        "received_at": received_at
-    }
-
-    # Find the email body
-    def find_plain_text(part):
-        if part.get("mimeType") == "text/plain":
-            data = part.get("body", {}).get("data")
-            if data:
-                return base64.urlsafe_b64decode(data).decode("utf-8")
-        # Check inside nested email parts
-        for nested_part in part.get("parts", []):
-            result = find_plain_text(nested_part)
-            if result:
-                return result
-        return ""
-    body = clean_email_body(find_plain_text(email["payload"]))
-    return {
-        "subject": subject,
         "body": body,
         "received_at": received_at
     }
