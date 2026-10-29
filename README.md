@@ -4,6 +4,15 @@ Inbox Copilot is an **AI-powered Gmail assistant** that organizes your inbox int
 
 Its standout feature is an **interactive AI questionnaire that gathers missing context before generating a reply**. By answering targeted follow-up questions, you help Claude create a draft tailored to your situation. You can edit the response and save it directly to Gmail Drafts without automatically sending it.
 
+## Demo
+
+Watch Inbox Copilot turn emails into actionable tasks, prioritize what needs attention, and generate personalized reply drafts.
+
+
+https://github.com/user-attachments/assets/fca4dcbe-1634-4918-a5ab-8bf44073e6f3
+
+
+
 ## AI-Powered Reply Drafting
 
 - **Interactive questionnaire:** Answers targeted follow-up questions to gather the context needed for a better reply.
