@@ -222,25 +222,30 @@ def root():
 
 
 @app.get("/gmail")
-def gmail_test():
-    # Get the latest 5 emails from Gmail
-    emails = get_latest_emails()
+def gmail_test(page_token: str | None = None):
+    # Get five emails from the requested Gmail page
+    gmail_page = get_latest_emails(page_token=page_token)
+    emails = gmail_page["emails"]
+    next_page_token = gmail_page["nextPageToken"]
 
-    # Load emails currently saved in Firestore
+    # Load emails already saved in Firestore
     existing_emails = {}
     for saved_email in db.collection("emails").stream():
         existing_emails[saved_email.id] = saved_email.to_dict()
 
     new_tasks = []
 
-    # Analyze the current Gmail batch
+    # Analyze the current batch
     for email in emails:
         email_id = email["id"]
         email_content = extract_email_content(email)
 
-        # Reuse existing data only when it has the summary field
-        if email_id in existing_emails and "summary" in existing_emails[email_id]:
-            saved = existing_emails[email_id]
+        # Reuse an existing analysis when available
+        if (
+            email_id in existing_emails
+            and "summary" in existing_emails[email_id]
+        ):
+            saved = existing_emails[email_id].copy()
             saved["sender"] = email_content["sender"]
             saved["body"] = email_content["body"]
             saved["received_at"] = email_content["received_at"]
@@ -270,18 +275,14 @@ def gmail_test():
             "reason": task["task"].reason,
         })
 
-    # Only keep the current Gmail batch in Firestore
-    current_ids = {email["id"] for email in new_tasks}
-
-    for saved_email in db.collection("emails").stream():
-        if saved_email.id not in current_ids:
-            saved_email.reference.delete()
-
-    # Save the current batch
+    # Save this batch without deleting previously loaded emails
     for email in new_tasks:
         save_email(email)
 
-    return new_tasks
+    return {
+        "emails": new_tasks,
+        "nextPageToken": next_page_token,
+    }
 
 
 @app.delete("/gmail/{email_id}")
@@ -298,7 +299,6 @@ def delete_gmail_email(email_id: str):
 def get_emails():
     emails = db.collection("emails").stream()
     results = []
-
     for email in emails:
         results.append(email.to_dict())
 

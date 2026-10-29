@@ -35,27 +35,37 @@ def get_gmail_service():
     # Create a connection to Gmail
     return build("gmail", "v1", credentials=creds)
 
-def get_latest_emails():
+def get_latest_emails(page_token=None):
     service = get_gmail_service()
-    # Ask Gmail for the 5 newest emails
-    results = service.users().messages().list(
+
+    # Request five messages from the current page
+    request = service.users().messages().list(
         userId="me",
         labelIds=["INBOX"],
-        maxResults=5
-    ).execute()
+        maxResults=5,
+        pageToken=page_token
+    )
+
+    results = request.execute()
     messages = results.get("messages", [])
-    if not messages:
-        return []
+
     emails = []
-    # Get the full contents of each email
+
+    # Fetch the full contents of each message
     for message in messages:
         email = service.users().messages().get(
             userId="me",
             id=message["id"],
             format="full"
         ).execute()
+
         emails.append(email)
-    return emails
+
+    # Return the emails and the token for the following page
+    return {
+        "emails": emails,
+        "nextPageToken": results.get("nextPageToken")
+    }
 
 def clean_email_body(body):
     # Remove excessive blank lines

@@ -242,6 +242,8 @@ function App() {
   const [emails, setEmails] = useState<Email[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null)
+  const [hasMoreEmails, setHasMoreEmails] = useState(true)
 
   const [activeReplyEmail, setActiveReplyEmail] = useState<Email | null>(null)
   const [replyQuestions, setReplyQuestions] = useState<ReplyQuestion[]>([])
@@ -261,8 +263,45 @@ function App() {
   const [refreshing, setRefreshing] = useState(false)
 
   // Keep the inbox list up to date
+  // Load the next page of emails, replacing the current page
   async function refreshEmails() {
+    if (refreshing || !nextPageToken) return
+
     setRefreshing(true)
+    setError('')
+
+    try {
+      const query = `?page_token=${encodeURIComponent(nextPageToken)}`
+      const response = await fetch(`${API_URL}/gmail${query}`)
+
+      if (!response.ok) {
+        throw new Error('Unable to load emails. Please try again.')
+      }
+
+      const data = await response.json()
+
+      if (!Array.isArray(data.emails)) {
+        throw new Error('The email service returned an unexpected response.')
+      }
+
+      // Replace the displayed emails instead of appending
+      setEmails(data.emails.slice(0, 5))
+      setNextPageToken(data.nextPageToken || null)
+      setHasMoreEmails(Boolean(data.nextPageToken))
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not connect to the email service.',
+      )
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+  async function loadInitialEmails() {
+    setLoading(true)
     setError('')
 
     try {
@@ -273,7 +312,14 @@ function App() {
       }
 
       const data = await response.json()
-      setEmails(Array.isArray(data) ? data.slice(0, 5) : [])
+
+      if (!Array.isArray(data.emails)) {
+        throw new Error('The email service returned an unexpected response.')
+      }
+
+      setEmails(data.emails.slice(0, 5))
+      setNextPageToken(data.nextPageToken || null)
+      setHasMoreEmails(Boolean(data.nextPageToken))
     } catch (err) {
       setError(
         err instanceof Error
@@ -282,13 +328,11 @@ function App() {
       )
     } finally {
       setLoading(false)
-      setRefreshing(false)
     }
   }
 
-  useEffect(() => {
-    void refreshEmails()
-  }, [])
+  void loadInitialEmails()
+}, [])
 
   // Get the questions needed to prepare a reply
   async function draftReply(email: Email) {
@@ -1191,7 +1235,11 @@ function App() {
           size={17}
           className={refreshing ? 'is-refreshing' : ''}
         />
-        {refreshing ? 'Refreshing inbox...' : 'Refresh latest 5 emails'}
+        {refreshing
+          ? 'Loading emails...'
+          : hasMoreEmails
+            ? 'Load next 5 emails'
+            : 'No more emails'}
       </button>
     </main>
   )
